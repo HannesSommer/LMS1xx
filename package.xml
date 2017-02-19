@@ -15,6 +15,7 @@
   <depend>roscpp</depend>
   <depend>roscpp_serialization</depend>
   <depend>sensor_msgs</depend>
+  <depend>cuckoo_time_translator</depend>
 
   <test_depend>roslaunch</test_depend>
   <test_depend>roslint</test_depend>

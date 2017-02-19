@@ -8,8 +8,8 @@ add_library(LMS1xx src/LMS1xx.cpp)
 target_link_libraries(LMS1xx ${console_bridge_LIBRARIES})
 
 # Regular catkin package follows.
-find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs)
-catkin_package(CATKIN_DEPENDS roscpp)
+find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs cuckoo_time_translator)
+catkin_package(CATKIN_DEPENDS roscpp cuckoo_time_translator)
 
 include_directories(include ${catkin_INCLUDE_DIRS})
 add_executable(LMS1xx_node src/LMS1xx_node.cpp)

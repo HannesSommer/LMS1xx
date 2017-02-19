@@ -23,6 +23,7 @@
 
 #include <csignal>
 #include <cstdio>
+#include <cuckoo_time_translator/DeviceTimeTranslator.h>
 #include <LMS1xx/LMS1xx.h>
 #include "ros/ros.h"
 #include "sensor_msgs/LaserScan.h"
@@ -42,15 +43,22 @@ int main(int argc, char **argv)
   std::string host;
   std::string frame_id;
   int port;
-
+  
   ros::init(argc, argv, "lms1xx");
   ros::NodeHandle nh;
   ros::NodeHandle n("~");
+  
   ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1);
 
   n.param<std::string>("host", host, "192.168.1.2");
   n.param<std::string>("frame_id", frame_id, "laser");
   n.param<int>("port", port, 2111);
+
+  cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime * hw_timer =
+      new cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslatorWithTransmitTime(
+        cuckoo_time_translator::WrappingClockParameters(1e6, 1e6),
+        n.getNamespace()
+      );
 
   while (ros::ok())
   {
@@ -118,6 +126,7 @@ int main(int argc, char **argv)
     dataCfg.position = false;
     dataCfg.deviceName = false;
     dataCfg.outputInterval = 1;
+    dataCfg.timestamp = true;
 
     ROS_DEBUG("Setting scan data configuration.");
     laser.setScanDataCfg(dataCfg);
@@ -167,15 +176,19 @@ int main(int argc, char **argv)
 
     while (ros::ok())
     {
-      ros::Time start = ros::Time::now();
-
-      scan_msg.header.stamp = start;
       ++scan_msg.header.seq;
 
       scanData data;
       ROS_DEBUG("Reading scan data.");
       if (laser.getScanData(&data))
       {
+        if(hw_timer){
+          scan_msg.header.stamp = hw_timer->update(data.hw_stamp_usec, data.hw_transmit_stamp_usec, data.receive_ros_time);
+        } else {
+          scan_msg.header.stamp = data.receive_ros_time;
+        }
+        ROS_DEBUG("Rostime : %lu", scan_msg.header.stamp.toNSec());
+
         for (int i = 0; i < data.dist_len1; i++)
         {
           scan_msg.ranges[i] = data.dist1[i] * 0.001;
@@ -188,6 +201,7 @@ int main(int argc, char **argv)
 
         ROS_DEBUG("Publishing scan data.");
         scan_pub.publish(scan_msg);
+
       }
       else
       {
@@ -203,5 +217,6 @@ int main(int argc, char **argv)
     laser.disconnect();
   }
 
+  delete hw_timer;
   return 0;
 }
