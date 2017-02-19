@@ -259,6 +259,7 @@ bool LMS1xx::getScanData(scanData* scan_data)
     logDebug("returned %d from select()", retval);
     if (retval)
     {
+      scan_data->receive_ros_time = ros::Time::now();
       buffer_.readFrom(socket_fd_);
 
       // Will return pointer if a complete message exists in the buffer,
@@ -292,7 +293,18 @@ void LMS1xx::parseScanData(char* buffer, scanData* data)
   tok = strtok(NULL, " "); //MessageCounter
   tok = strtok(NULL, " "); //ScanCounter
   tok = strtok(NULL, " "); //PowerUpDuration
+
+  uint32_t PowerUpDuration;
+  sscanf(tok, "%X", &PowerUpDuration);
+  logDebug("PowerUpDuration : %d\n", PowerUpDuration);
+  data->hw_stamp_usec = PowerUpDuration;
+
   tok = strtok(NULL, " "); //TransmissionDuration
+  uint32_t TransmissionDuration;
+  sscanf(tok, "%X", &TransmissionDuration);
+  logDebug("TransmissionDuration : %d\n", TransmissionDuration);
+
+
   tok = strtok(NULL, " "); //InputStatus
   tok = strtok(NULL, " "); //OutputStatus
   tok = strtok(NULL, " "); //ReservedByteA

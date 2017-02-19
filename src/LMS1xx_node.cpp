@@ -23,6 +23,7 @@
 
 #include <csignal>
 #include <cstdio>
+#include <sm/timing/TimestampCorrector.hpp>
 #include <LMS1xx/LMS1xx.h>
 #include "ros/ros.h"
 #include "sensor_msgs/LaserScan.h"
@@ -38,10 +39,13 @@ int main(int argc, char **argv)
   scanDataCfg dataCfg;
   sensor_msgs::LaserScan scan_msg;
 
+  sm::timing::TimestampCorrector<uint64_t> timestampCorrector;
+
   // parameters
   std::string host;
   std::string frame_id;
   int port;
+  bool use_hwtime;
 
   ros::init(argc, argv, "lms1xx");
   ros::NodeHandle nh;
@@ -50,7 +54,14 @@ int main(int argc, char **argv)
 
   n.param<std::string>("host", host, "192.168.1.2");
   n.param<std::string>("frame_id", frame_id, "laser");
+  n.param("use_hwtime", use_hwtime, false);
   n.param<int>("port", port, 2111);
+
+  if(use_hwtime){
+    ROS_INFO_STREAM("Going to use hardware timestamps. Experimental!");
+  } else {
+    ROS_INFO_STREAM("NOT Going to use hardware timestamps.");
+  }
 
   while (ros::ok())
   {
@@ -167,15 +178,18 @@ int main(int argc, char **argv)
 
     while (ros::ok())
     {
-      ros::Time start = ros::Time::now();
-
-      scan_msg.header.stamp = start;
       ++scan_msg.header.seq;
 
       scanData data;
       ROS_DEBUG("Reading scan data.");
       if (laser.getScanData(&data))
       {
+        if(use_hwtime){
+          scan_msg.header.stamp.fromNSec(timestampCorrector.correctTimestamp(data.hw_stamp_usec * 1000, data.receive_ros_time.toNSec()));
+        } else {
+          scan_msg.header.stamp = data.receive_ros_time;
+        }
+
         for (int i = 0; i < data.dist_len1; i++)
         {
           scan_msg.ranges[i] = data.dist1[i] * 0.001;

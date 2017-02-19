@@ -24,6 +24,7 @@
 #ifndef LMS1XX_LMS_STRUCTS_H_
 #define LMS1XX_LMS_STRUCTS_H_
 
+#include <ros/time.h>
 #include <stdint.h>
 
 /*!
@@ -201,6 +202,9 @@ struct scanData
    *
    */
   uint16_t rssi2[1082];
+
+  uint32_t hw_stamp_usec;
+  ros::Time receive_ros_time;
 };
 
 #endif  // LMS1XX_LMS_STRUCTS_H_
