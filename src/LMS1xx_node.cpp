@@ -210,7 +210,7 @@ int main(int argc, char **argv)
           const int timestampLearnLimit = -1;
           if (timestampLearnLimit < 0 || scan_msg.header.seq < timestampLearnLimit) {
             timestampCorrector.correctTimestamp(hw_transmit.getDouble(), data.receive_ros_time.toSec());
-          } else if(scan_msg.header.seq == timestampLearnLimit){
+          } else if((int)scan_msg.header.seq == timestampLearnLimit){
             std::cout << "timestampCorrector.getSlope()=" << timestampCorrector.getSlope() << std::endl; // XXX: debug output of timestampCorrector.getSlope((
           }
 
