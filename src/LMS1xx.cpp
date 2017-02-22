@@ -289,24 +289,34 @@ void LMS1xx::parseScanData(char* buffer, scanData* data)
   tok = strtok(NULL, " "); //VersionNumber
   tok = strtok(NULL, " "); //DeviceNumber
   tok = strtok(NULL, " "); //Serial number
+//  printf("Serial number : %s\n", tok);
   tok = strtok(NULL, " "); //DeviceStatus
+//  printf("DeviceStatus : %s\n", tok);
+  tok = strtok(NULL, " "); //InputStatus TODO CLEANUP THIS MESS!
+//  printf("InputStatus : %s\n", tok);
   tok = strtok(NULL, " "); //MessageCounter
+//  printf("MessageCounter : %s\n", tok);
   tok = strtok(NULL, " "); //ScanCounter
+//  printf("ScanCounter : %s\n", tok);
   tok = strtok(NULL, " "); //PowerUpDuration
+//  printf("PowerUpDuration : %s\n", tok);
 
   uint32_t PowerUpDuration;
   sscanf(tok, "%X", &PowerUpDuration);
-  logDebug("PowerUpDuration : %d\n", PowerUpDuration);
+  logDebug("PowerUpDuration : %u", PowerUpDuration);
+//  printf("PowerUpDuration : %u\n", PowerUpDuration);
   data->hw_stamp_usec = PowerUpDuration;
 
   tok = strtok(NULL, " "); //TransmissionDuration
   uint32_t TransmissionDuration;
   sscanf(tok, "%X", &TransmissionDuration);
-  logDebug("TransmissionDuration : %d\n", TransmissionDuration);
+  data->hw_transmit_stamp_usec = TransmissionDuration;
+//  printf("TransmissionDuration : %s\n", tok);
+  logDebug("TransmissionDuration : %u", TransmissionDuration);
+//  printf("TransmissionDuration : %u (delta=%ld)\n", TransmissionDuration, int64_t(TransmissionDuration)-int64_t(PowerUpDuration));
 
-
-  tok = strtok(NULL, " "); //InputStatus
   tok = strtok(NULL, " "); //OutputStatus
+//  printf("OutputStatus : %s\n", tok);
   tok = strtok(NULL, " "); //ReservedByteA
   tok = strtok(NULL, " "); //ScanningFrequency
   tok = strtok(NULL, " "); //MeasurementFrequency

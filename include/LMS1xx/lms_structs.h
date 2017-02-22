@@ -204,6 +204,7 @@ struct scanData
   uint16_t rssi2[1082];
 
   uint32_t hw_stamp_usec;
+  uint32_t hw_transmit_stamp_usec;
   ros::Time receive_ros_time;
 };
 

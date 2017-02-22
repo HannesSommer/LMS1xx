@@ -39,7 +39,7 @@ int main(int argc, char **argv)
   scanDataCfg dataCfg;
   sensor_msgs::LaserScan scan_msg;
 
-  sm::timing::TimestampCorrector<uint64_t> timestampCorrector;
+  sm::timing::TimestampCorrector<double> timestampCorrector;
 
   // parameters
   std::string host;
@@ -129,6 +129,7 @@ int main(int argc, char **argv)
     dataCfg.position = false;
     dataCfg.deviceName = false;
     dataCfg.outputInterval = 1;
+    dataCfg.timestamp = true;
 
     ROS_DEBUG("Setting scan data configuration.");
     laser.setScanDataCfg(dataCfg);
@@ -176,6 +177,25 @@ int main(int argc, char **argv)
     ROS_DEBUG("Commanding continuous measurements.");
     laser.scanContinous(1);
 
+
+    struct WrapFixer {
+      uint32_t hwSecs = 0, lastHwUsecs = -1;
+
+      void update (uint32_t hwUsecs) {
+        if (lastHwUsecs > hwUsecs) {
+          hwSecs ++;
+        }
+        lastHwUsecs = hwUsecs;
+      }
+      uint64_t getNSecs() {
+        return hwSecs * uint64_t(1e9) + lastHwUsecs * 1000;
+      }
+
+      double getDouble() {
+        return (double)hwSecs + lastHwUsecs * 1e-6;
+      }
+    } hw_transmit, hw_start;
+
     while (ros::ok())
     {
       ++scan_msg.header.seq;
@@ -185,9 +205,29 @@ int main(int argc, char **argv)
       if (laser.getScanData(&data))
       {
         if(use_hwtime){
-          scan_msg.header.stamp.fromNSec(timestampCorrector.correctTimestamp(data.hw_stamp_usec * 1000, data.receive_ros_time.toNSec()));
+          hw_start.update(data.hw_stamp_usec);
+          hw_transmit.update(data.hw_transmit_stamp_usec);
+          const int timestampLearnLimit = -1;
+          if (timestampLearnLimit < 0 || scan_msg.header.seq < timestampLearnLimit) {
+            timestampCorrector.correctTimestamp(hw_transmit.getDouble(), data.receive_ros_time.toSec());
+          } else if(scan_msg.header.seq == timestampLearnLimit){
+            std::cout << "timestampCorrector.getSlope()=" << timestampCorrector.getSlope() << std::endl; // XXX: debug output of timestampCorrector.getSlope((
+          }
+
+          if(scan_msg.header.seq > 1){
+            double local = timestampCorrector.getLocalTime(hw_start.getDouble());
+            if(timestampLearnLimit > 0 && scan_msg.header.seq >= timestampLearnLimit){
+              local = timestampCorrector.getOffset() + timestampCorrector.getSlope() * hw_start.getDouble();
+            }
+            scan_msg.header.stamp.fromSec(local);
+
+          } else {
+            scan_msg.header.stamp = data.receive_ros_time;
+          }
+          ROS_DEBUG("Hwtime: %u mapped to %lu", data.hw_stamp_usec, scan_msg.header.stamp.toNSec());
         } else {
           scan_msg.header.stamp = data.receive_ros_time;
+          ROS_DEBUG("Rostime : %lu", scan_msg.header.stamp.toNSec());
         }
 
         for (int i = 0; i < data.dist_len1; i++)
