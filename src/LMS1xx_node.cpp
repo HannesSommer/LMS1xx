@@ -23,7 +23,7 @@
 
 #include <csignal>
 #include <cstdio>
-#include <sm/timing/TimestampCorrector.hpp>
+#include <hw_timer/HwTimer.hpp>
 #include <LMS1xx/LMS1xx.h>
 #include "ros/ros.h"
 #include "sensor_msgs/LaserScan.h"
@@ -39,29 +39,22 @@ int main(int argc, char **argv)
   scanDataCfg dataCfg;
   sensor_msgs::LaserScan scan_msg;
 
-  sm::timing::TimestampCorrector<double> timestampCorrector;
-
   // parameters
   std::string host;
   std::string frame_id;
   int port;
-  bool use_hwtime;
-
+  
   ros::init(argc, argv, "lms1xx");
   ros::NodeHandle nh;
   ros::NodeHandle n("~");
+  
   ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1);
 
   n.param<std::string>("host", host, "192.168.1.2");
   n.param<std::string>("frame_id", frame_id, "laser");
-  n.param("use_hwtime", use_hwtime, false);
   n.param<int>("port", port, 2111);
 
-  if(use_hwtime){
-    ROS_INFO_STREAM("Going to use hardware timestamps. Experimental!");
-  } else {
-    ROS_INFO_STREAM("NOT Going to use hardware timestamps.");
-  }
+  hw_timer::HwTimer hw_timer(scan_pub.getTopic(), nh, 1000);
 
   while (ros::ok())
   {
@@ -177,24 +170,8 @@ int main(int argc, char **argv)
     ROS_DEBUG("Commanding continuous measurements.");
     laser.scanContinous(1);
 
+    hw_timer::WrapFixer hw_transmit(1e6, 1e6), hw_start(hw_transmit);
 
-    struct WrapFixer {
-      uint32_t hwSecs = 0, lastHwUsecs = -1;
-
-      void update (uint32_t hwUsecs) {
-        if (lastHwUsecs > hwUsecs) {
-          hwSecs ++;
-        }
-        lastHwUsecs = hwUsecs;
-      }
-      uint64_t getNSecs() {
-        return hwSecs * uint64_t(1e9) + lastHwUsecs * 1000;
-      }
-
-      double getDouble() {
-        return (double)hwSecs + lastHwUsecs * 1e-6;
-      }
-    } hw_transmit, hw_start;
 
     while (ros::ok())
     {
@@ -204,31 +181,8 @@ int main(int argc, char **argv)
       ROS_DEBUG("Reading scan data.");
       if (laser.getScanData(&data))
       {
-        if(use_hwtime){
-          hw_start.update(data.hw_stamp_usec);
-          hw_transmit.update(data.hw_transmit_stamp_usec);
-          const int timestampLearnLimit = -1;
-          if (timestampLearnLimit < 0 || scan_msg.header.seq < timestampLearnLimit) {
-            timestampCorrector.correctTimestamp(hw_transmit.getDouble(), data.receive_ros_time.toSec());
-          } else if((int)scan_msg.header.seq == timestampLearnLimit){
-            std::cout << "timestampCorrector.getSlope()=" << timestampCorrector.getSlope() << std::endl; // XXX: debug output of timestampCorrector.getSlope((
-          }
-
-          if(scan_msg.header.seq > 1){
-            double local = timestampCorrector.getLocalTime(hw_start.getDouble());
-            if(timestampLearnLimit > 0 && scan_msg.header.seq >= timestampLearnLimit){
-              local = timestampCorrector.getOffset() + timestampCorrector.getSlope() * hw_start.getDouble();
-            }
-            scan_msg.header.stamp.fromSec(local);
-
-          } else {
-            scan_msg.header.stamp = data.receive_ros_time;
-          }
-          ROS_DEBUG("Hwtime: %u mapped to %lu", data.hw_stamp_usec, scan_msg.header.stamp.toNSec());
-        } else {
-          scan_msg.header.stamp = data.receive_ros_time;
-          ROS_DEBUG("Rostime : %lu", scan_msg.header.stamp.toNSec());
-        }
+        scan_msg.header.stamp = data.receive_ros_time;
+        ROS_DEBUG("Rostime : %lu", scan_msg.header.stamp.toNSec());
 
         for (int i = 0; i < data.dist_len1; i++)
         {
@@ -242,6 +196,36 @@ int main(int argc, char **argv)
 
         ROS_DEBUG("Publishing scan data.");
         scan_pub.publish(scan_msg);
+
+        if(hw_timer.isUsed()){
+          hw_start.update(data.hw_stamp_usec);
+          hw_transmit.update(data.hw_transmit_stamp_usec);
+          hw_timer.update(hw_start, hw_transmit, data.receive_ros_time.toSec());
+//          const int timestampLearnLimit = -1;
+//          if (timestampLearnLimit < 0 || scan_msg.header.seq < timestampLearnLimit) {
+//            timestampCorrector.correctTimestamp(hw_transmit.toSec(), data.receive_ros_time.toSec());
+//          } else if((int)scan_msg.header.seq == timestampLearnLimit){
+//            fixedSlope = timestampCorrector.getSlope();
+//            fixedOffset = timestampCorrector.getOffset();
+//            ROS_INFO("Fixed slope to %.10f and offset to %.10f", fixedSlope, fixedOffset);
+//          }
+//
+//          raw_hw_time_msg.data = hw_start.getStamp();
+//          hw_time_pub.publish(raw_hw_time_msg);
+//          raw_hw_time_msg.data = hw_transmit.getStamp();
+//          hw_time_transmit_pub.publish(raw_hw_time_msg);
+//
+//          if(scan_msg.header.seq > 1){
+//            hw_time_msg.data.fromSec(timestampCorrector.getLocalTime(hw_start.toSec()));
+//            hw_time_filtered_pub.publish(hw_time_msg);
+//            ROS_DEBUG("Hwtime: %u mapped to %lu", data.hw_stamp_usec, scan_msg.header.stamp.toNSec());
+//
+//            if(timestampLearnLimit > 0 && scan_msg.header.seq >= timestampLearnLimit){
+//              hw_time_msg.data.fromSec(timestampCorrector.getOffset() + timestampCorrector.getSlope() * hw_start.toSec());
+//              hw_time_filtered_fixed_pub.publish(hw_time_msg);
+//            }
+//          }
+        }
       }
       else
       {
