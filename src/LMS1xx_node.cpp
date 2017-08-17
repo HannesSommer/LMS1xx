@@ -174,6 +174,8 @@ int main(int argc, char **argv)
     ROS_DEBUG("Commanding continuous measurements.");
     laser.scanContinous(1);
 
+    uint32_t previous_hw_stamp_usec;
+    bool is_first_data = true;
     while (ros::ok())
     {
       ++scan_msg.header.seq;
@@ -183,7 +185,13 @@ int main(int argc, char **argv)
       if (laser.getScanData(&data))
       {
         if(hw_timer){
-          scan_msg.header.stamp = hw_timer->update(data.hw_stamp_usec, data.hw_transmit_stamp_usec, data.receive_ros_time);
+          if(is_first_data){
+            scan_msg.header.stamp = hw_timer->update(data.hw_stamp_usec, data.hw_transmit_stamp_usec, data.receive_ros_time);
+            is_first_data = false;
+          } else {
+            scan_msg.header.stamp = hw_timer->update(previous_hw_stamp_usec, data.hw_transmit_stamp_usec, scan_msg.header.stamp);
+          }
+          previous_hw_stamp_usec = data.hw_stamp_usec;
         } else {
           scan_msg.header.stamp = data.receive_ros_time;
         }
